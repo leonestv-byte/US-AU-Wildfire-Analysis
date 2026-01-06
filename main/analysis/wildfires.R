@@ -7,8 +7,13 @@
 
 
 library(rstanarm)
-au_data <- read.csv("MSISS/wildfires/main/data/au_wildfires.csv")
-us_data <- read.csv("MSISS/wildfires/main/data/us_wildfires.csv")
+# 2019
+# au_data <- read.csv("MSISS/wildfires/main/data/au_wildfires_2019.csv")
+# us_data <- read.csv("MSISS/wildfires/main/data/us_wildfires_2019.csv")
+
+# 2020
+au_data <- read.csv("MSISS/wildfires/main/data/au_wildfires_2020.csv")
+us_data <- read.csv("MSISS/wildfires/main/data/us_wildfires_2020.csv")
 
 
 min(au_data$acq_date)
@@ -30,21 +35,21 @@ au_data$nighttime <- ifelse(au_data$daynight == "N", 1, 0)
 us_data$nighttime <- ifelse(us_data$daynight == "N", 1, 0)
 
 au_successes <- sum(au_data$nighttime == 1)
-#7808 wildfires in the night
+#35422 wildfires in the night
 au_failures <- sum(au_data$nighttime == 0)
-#28203 wildfires in the day
+#120995 wildfires in the day
 
 us_successes <- sum(us_data$nighttime == 1)
-#3838 wildfires in the night
+#43369 wildfires in the night
 us_failures <- sum(us_data$nighttime == 0)
-#13694 wildfires in the day
+#110547 wildfires in the day
 
 #####                                 ##### 
 ##### AU Prior, Likelihood, Posterior ##### 
 #####                                 ##### 
 
-alpha <- 7
-beta <- 30
+alpha <- 3
+beta <- 12
 
 alpha_posterior = alpha + au_successes
 beta_posterior = beta + au_failures
@@ -75,8 +80,8 @@ lines(p_values, likelihood_density, col = "green", lwd = 2)
 ##### US Prior, Likelihood, Posterior ##### 
 #####                                 #####
 
-alpha <- 3
-beta <- 13
+alpha <- 4
+beta <- 11
 
 alpha_posterior = alpha + us_successes
 beta_posterior = beta + us_failures
@@ -147,20 +152,20 @@ summary(fit)
 # Family: bernoulli 
 # Links: mu = logit 
 # Formula: nighttime ~ brightness + s(latitude, longitude, k = 10) 
-# Data: data_clean (Number of observations: 36011) 
+# Data: data_clean (Number of observations: 156417) 
 # Draws: 1 chains, each with iter = 50; warmup = 25; thin = 1;
 # total post-warmup draws = 25
 
 # Smoothing Spline Hyperparameters:
 #  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# sds(slatitudelongitude_1)     1.30      1.10     0.21     3.68 1.63        2       10
+# sds(slatitudelongitude_1)     0.98      0.09     0.82     1.06 2.12        2       10
 
 # Regression Coefficients:
-#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# Intercept               33.33      2.30    28.97    36.89 1.67        2       10
-# brightness              -0.11      0.01    -0.12    -0.09 1.67        2       10
-# slatitudelongitude_1    -2.99      4.45   -11.40     0.67 1.36        3       10
-# slatitudelongitude_2    -1.88      0.62    -2.94    -1.13 1.81        2       13
+#  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# Intercept               14.61      2.09    12.67    18.39 1.93        2       10
+# brightness              -0.05      0.01    -0.06    -0.04 1.97        2       10
+# slatitudelongitude_1    -0.15      0.04    -0.18    -0.06 1.85        2       10
+# slatitudelongitude_2    -1.88      0.00    -1.88    -1.88 1.01        9       13
 
 
 #####                                 ##### 
@@ -206,25 +211,26 @@ fit <- brm(
 
 
 summary(fit)
-# 1 chain, 50 iterations, 1 core:
 # Family: bernoulli 
 # Links: mu = logit 
 # Formula: nighttime ~ brightness + s(latitude, longitude, k = 10) 
-# Data: data_clean (Number of observations: 17532) 
+# Data: data_clean (Number of observations: 153916) 
 # Draws: 1 chains, each with iter = 50; warmup = 25; thin = 1;
 # total post-warmup draws = 25
 
 # Smoothing Spline Hyperparameters:
-#  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# sds(slatitudelongitude_1)     0.40      0.21     0.15     0.83 1.13       10       10
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sds(slatitudelongitude_1)     3.92      0.23     3.70     4.36 2.13        2       10
 
 # Regression Coefficients:
-#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# Intercept               16.93      2.98    11.21    20.22 1.97        2       10
-# brightness              -0.06      0.01    -0.07    -0.04 1.97        2       10
-# slatitudelongitude_1     0.87      1.69    -1.06     3.72 1.47        3       10
-# slatitudelongitude_2    -1.57      0.76    -2.65    -0.67 2.02        2       11
+#  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# Intercept                1.90      0.22     1.70     2.31 1.18        4       16
+# brightness              -0.01      0.00    -0.01    -0.00 2.02        2       11
+# slatitudelongitude_1     0.48      0.02     0.45     0.50 1.97        2       10
+# slatitudelongitude_2    -1.39      0.02    -1.41    -1.36 2.13        2       10
 
-# Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
-# and Tail_ESS are effective sample size measures, and Rhat is the potential
-# scale reduction factor on split chains (at convergence, Rhat = 1).
+
+
+
+
+
