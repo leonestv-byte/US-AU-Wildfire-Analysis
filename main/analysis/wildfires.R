@@ -106,6 +106,67 @@ lines(p_values, likelihood_density, col = "green", lwd = 2)
 ##### Night Time - Spatial Hierarchical Models   #############
 ##############################################################
 
+
+#####                                 ##### 
+##### AU Spatial Hierarchical Model   ##### 
+#####                                 #####
+
+library(brms)
+
+set.seed(321)
+
+data_clean <- na.omit(au_data[, c("nighttime", "brightness",
+                                  "latitude", "longitude")])
+
+# 1. Scaled/centered columns
+lat_center <- mean(data_clean$latitude)
+lat_scale  <- sd(data_clean$latitude)
+lon_center <- mean(data_clean$longitude)
+lon_scale  <- sd(data_clean$longitude)
+
+# 2. Turn columns into Vectors
+data_clean$lat_sc <- as.vector((data_clean$latitude - lat_center) / lat_scale)
+data_clean$lon_sc <- as.vector((data_clean$longitude - lon_center) / lon_scale)
+
+# 3. Use geolocation to create knots
+set.seed(321)
+knots <- data_clean[sample(nrow(data_clean), 300), c("lat_sc", "lon_sc")]
+
+fit <- brm(
+  nighttime ~ brightness +
+    s(latitude, longitude, k = 10),
+  data = data_clean,
+  family = bernoulli(),
+  chains = 1,
+  iter = 50,
+  cores = 1
+)
+
+
+summary(fit)
+# Family: bernoulli 
+# Links: mu = logit 
+# Formula: nighttime ~ brightness + s(latitude, longitude, k = 10) 
+# Data: data_clean (Number of observations: 36011) 
+# Draws: 1 chains, each with iter = 50; warmup = 25; thin = 1;
+# total post-warmup draws = 25
+
+# Smoothing Spline Hyperparameters:
+#  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# sds(slatitudelongitude_1)     1.30      1.10     0.21     3.68 1.63        2       10
+
+# Regression Coefficients:
+#   Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# Intercept               33.33      2.30    28.97    36.89 1.67        2       10
+# brightness              -0.11      0.01    -0.12    -0.09 1.67        2       10
+# slatitudelongitude_1    -2.99      4.45   -11.40     0.67 1.36        3       10
+# slatitudelongitude_2    -1.88      0.62    -2.94    -1.13 1.81        2       13
+
+
+#####                                 ##### 
+##### US Spatial Hierarchical Model   ##### 
+#####                                 #####
+
 library(brms)
 
 set.seed(321)
@@ -124,6 +185,7 @@ data_clean$lat_sc <- as.vector((data_clean$latitude - lat_center) / lat_scale)
 data_clean$lon_sc <- as.vector((data_clean$longitude - lon_center) / lon_scale)
 
 # 3. Use geolocation to create knots
+set.seed(321)
 knots <- data_clean[sample(nrow(data_clean), 300), c("lat_sc", "lon_sc")]
 
 knots <- data.frame(
