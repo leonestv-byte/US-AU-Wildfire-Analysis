@@ -142,30 +142,66 @@ fit <- brm(
     s(latitude, longitude, k = 10),
   data = data_clean,
   family = bernoulli(),
-  chains = 1,
-  iter = 50,
-  cores = 1
+  chains = 4,
+  iter = 2000,
+  cores = 4
 )
 
 
 summary(fit)
+au_fit <- fit
+theta <- posterior_linpred(au_fit, transform = TRUE)
+
+theta_mean <- colMeans(theta)
+y_pred <- ifelse(theta_mean > 0.5, 1, 0)
+y_true <- data_clean$nighttime
+accuracy <- mean(y_pred == y_true)
+accuracy #  0.8393269
+
+y_true <- data_clean$nighttime
+
+TP <- sum(y_pred == 1 & y_true == 1)
+FP <- sum(y_pred == 1 & y_true == 0)
+FN <- sum(y_pred == 0 & y_true == 1)
+TN <- sum(y_pred == 0 & y_true == 0)
+
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+TPR <- TP / (TP + FN)
+FPR <- FP / (FP + TN)
+TNR <- TN / (TN + FP)
+FNR <- FN / (FN + TP)
+
+rates <- c(
+  Accuracy = accuracy,
+  TPR = TPR,   # sensitivity
+  FPR = FPR,
+  TNR = TNR,   # specificity
+  FNR = FNR
+)
+
+rates
+
+# Accuracy       TPR       FPR       TNR       FNR 
+# 0.8393269 0.4915871 0.0588702 0.9411298 0.5084129 
+
+
 # Family: bernoulli 
 # Links: mu = logit 
 # Formula: nighttime ~ brightness + s(latitude, longitude, k = 10) 
 # Data: data_clean (Number of observations: 156417) 
-# Draws: 1 chains, each with iter = 50; warmup = 25; thin = 1;
-# total post-warmup draws = 25
+# Draws: 4 chains, each with iter = 2000; warmup = 1000; thin = 1;
+# total post-warmup draws = 4000
 
 # Smoothing Spline Hyperparameters:
 #  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# sds(slatitudelongitude_1)     0.98      0.09     0.82     1.06 2.12        2       10
+# sds(slatitudelongitude_1)     5.00      1.33     3.15     8.32 1.01      679     1158
 
 # Regression Coefficients:
-#  Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-# Intercept               14.61      2.09    12.67    18.39 1.93        2       10
-# brightness              -0.05      0.01    -0.06    -0.04 1.97        2       10
-# slatitudelongitude_1    -0.15      0.04    -0.18    -0.06 1.85        2       10
-# slatitudelongitude_2    -1.88      0.00    -1.88    -1.88 1.01        9       13
+#                          Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+# Intercept               25.00      0.19    24.62    25.37 1.00     3139     2925
+# brightness              -0.08      0.00    -0.08    -0.08 1.00     3069     2975
+# slatitudelongitude_1    16.12      0.25    15.64    16.61 1.00     2428     2619
+# slatitudelongitude_2    -7.56      0.16    -7.87    -7.26 1.00     2286     2309
 
 
 #####                                 ##### 
