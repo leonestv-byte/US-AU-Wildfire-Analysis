@@ -1,6 +1,7 @@
 #######################################################
 ##### Steven Leone - Comparison of Wildfires.  ########
 #######################################################
+# https://firms.modaps.eosdis.nasa.gov/content/descriptions/FIRMS_MODIS_Firehotspots.html
 
 # Bayesian Analysis for Wildfire Inference in the US and Australia through Spatial Hierarchical Models
 
@@ -240,9 +241,9 @@ fit <- brm(
     s(latitude, longitude, k = 10),
   data = data_clean,
   family = bernoulli(),
-  chains = 1,
-  iter = 50,
-  cores = 1
+  chains = 4,
+  iter = 2000,
+  cores = 4
 )
 
 
