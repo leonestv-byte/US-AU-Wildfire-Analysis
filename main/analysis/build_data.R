@@ -1,8 +1,14 @@
 
+##############################
+##### Build Datasets    ######
+##############################
 
+# - Load Datasets from 2020
 
-
+# 1) Australia
 au_data <- read.csv("MSISS/wildfires/main/data/au_wildfires_2020.csv")
+
+# 2) United States
 us_data <- read.csv("MSISS/wildfires/main/data/us_wildfires_2020.csv")
 
 
@@ -10,6 +16,7 @@ us_data <- read.csv("MSISS/wildfires/main/data/us_wildfires_2020.csv")
 ##### Time Histograms   ######
 ##############################
 
+# 1) Australia
 au_data
 # latitude longitude brightness scan track   acq_date acq_time satellite instrument confidence version bright_t31  frp daynight type
 # 1  -13.2051  143.1472      337.2  1.0   1.0 2020-01-01       50     Terra      MODIS         87    6.03      298.0 27.9        D    0
@@ -32,27 +39,20 @@ hist(
   border = "white"
 )
 
-hist(us_data$acq_time)
-us_data$acq_date <- as.Date(us_data$acq_date)
-hist(
-  us_data$acq_date,
-  breaks = "months",
-  main = "Histogram of Acquisition Dates",
-  xlab = "Acquisition Date",
-  col = "lightblue",
-  border = "white"
-)
-
 
 ################################
 ##### Non Wildfire Data   ######
 ################################
 
-# Define the study area
+
+# 1) Australia
 
 install.packages("sf")
 library(sf)
 
+# 1a) Region Boundary.
+# Define the study area.
+# Ex, get a bounding box for the region.
 fires <- st_as_sf(
   au_data,
   coords = c("longitude", "latitude"),
@@ -60,10 +60,12 @@ fires <- st_as_sf(
 )
 
 study_area <- st_bbox(fires)
+# xmin     ymin     xmax     ymax 
+# 113.1446 -43.5006 153.5515  -9.2741 
 
-# Non fire points
+# 1b) Nonfire sampled from regional boundary.
 
-set.seed(123)
+set.seed(321)
 
 n_nonfire <- nrow(au_data) * 2  # common ratio 1:2 or 1:3
 
@@ -80,16 +82,13 @@ nonfire <- st_sf(
   geometry = nonfire_pts
 )
 
-# Combine with fires.
+# 1c) Combine with fires.
 fires$wildfire <- 1
 
 fire_data <- rbind(
   fires[, "wildfire"],
   nonfire[, "wildfire"]
 )
-
-
-# 
 
 sum(fire_data$wildfire)
 # 156417
@@ -98,9 +97,10 @@ sum(fire_data$wildfire)
 ##########################
 ### Regular Predictors ###
 ##########################
+# Add in predictors from the main dataset.
 
-# Here, we take our simulated non fire data, add them together with observed wildfire data, and
-# add in type, datetime, and brightness. 
+# 1) Australia
+
 st_crs(fires)
 st_crs(nonfire)
 
@@ -126,26 +126,43 @@ fires_type$datetime <- as.POSIXct(
 
 
 set.seed(321)
-
 nonfire_type$datetime <- sample(
   fires_type$datetime,
   size = nrow(nonfire_type),
   replace = TRUE
 )
 
+# Setup a buffer so that fire and non simulated fire data do not
+# show up together.
+max_dist  <- units::set_units(1, km)     # spatial buffer
+max_time  <- as.difftime(1, units = "hours") # temporal buffer
+
+idx <- st_nearest_feature(nonfire_type, fires_type)
+nearest_fire <- fires_type[idx, ]
+
+dist_space <- st_distance(nonfire_type, nearest_fire, by_element = TRUE)
+
+dist_time <- abs(
+  difftime(nonfire_type$datetime, nearest_fire$datetime, units = "hours")
+)
+
+valid_nonfire <- !(
+  dist_space <= max_dist &
+    dist_time  <= max_time
+)
+
+nonfire_clean <- nonfire_type[valid_nonfire, ]
+
 fires_type_clean <- fires_type[, c("wildfire", "brightness", "type", "datetime")]
 
 fire_data <- rbind(
   fires_type_clean,
-  nonfire_type
+  nonfire_clean
 )
-
-
 
 ###################
 ### Histograms ###
 ##################
-
 
 hist(
   fire_data$datetime,
@@ -158,11 +175,48 @@ hist(
 
 table(fire_data$wildfire)
 # 0      1 
-# 312834 156417 
+# 312,825 156,417 
 
-# TODO: Pivot Back to make just as much progress on the US data.
+###########################################################################
+###### Add Daynight back in, calculated with suncalc for nonfire data #####
+###########################################################################
 
 
+# library(lubridate)
+# fire_data$datetime_utc <- with_tz(fire_data$datetime, "UTC")
+
+install.packages(("suncalc"))
+library(suncalc)
+
+library(sf) 
+coords <- st_coordinates(fire_data)
+fire_data$longitude <- coords[, 1]
+fire_data$latitude  <- coords[, 2]
+
+pos <- getSunlightPosition(
+  data = data.frame(
+    date = fire_data$datetime,
+    lat  = fire_data$latitude,
+    lon  = fire_data$longitude
+  )
+)
+
+fire_data$sza <- 90 - (pos$altitude * 180 / pi)
+
+fire_data$computed_daynight_sza <- ifelse(
+  fire_data$sza < 85, "N", "D"
+)
+
+# Sanity Checking
+table(fire_data$computed_daynight_sza[fire_data$wildfire == 1])
+# D      N 
+# 120993  35422 
+table(au_data$daynight)
+# D      N 
+# 120995  35422 
+table(fire_data$computed_daynight_sza)
+# D      N 
+# 363116 106120 
 
 
 
