@@ -15,15 +15,19 @@ us_data <- bind_rows(us_data_fires, us_data_no_fires) %>%
     latitude,
     longitude,
     computed_daynight_sza,
+    daynight,
     humidity,
-    wind
+    wind,
+    ndvi,
+    precipitation
   )
 
-#TODO: fix
-#us_data$nighttime <- ifelse(us_data$computed_daynight_sza == "N", 1, 0)
+# Fix different values in computed_daynight_sza and daynight bug:
+us_data <- us_data %>% mutate(daynight_combined = coalesce(daynight, computed_daynight_sza))
+us_data$nighttime <- ifelse(us_data$daynight_combined == "N", 1, 0)
 
 data_clean <- na.omit(us_data[, c("wildfire",
-                                  "latitude", "longitude", "temp_C", "wind", "humidity")])
+                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "ndvi", "precipitation")])
 
 # 1. Scaled/centered columns
 lat_center <- mean(data_clean$latitude)
@@ -46,9 +50,9 @@ test_data  <- data_clean[-train_idx, ]
 
 
 fit <- brm(
-  wildfire ~ temp_C  + wind + humidity + 
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + nighttime + 
   s(latitude, longitude, k = 10),
-  data = data_clean,
+  data = data_clean, #train_data,
   family = bernoulli(),
   chains = 4,
   iter = 2000, #10,000
@@ -58,12 +62,54 @@ fit <- brm(
 summary(fit)
 theta <- posterior_linpred(fit, transform = TRUE)
 
+########################
+# Test Data Result     #
+########################
+p_test <- posterior_epred(fit, newdata = test_data)
+p_test_mean <- colMeans(p_test)
+y_pred <- ifelse(p_test_mean > 0.5, 1, 0)
+y_true <- test_data$wildfire
+
+accuracy <- mean(y_pred == y_true)
+accuracy # 0.8575
+
+TP <- sum(y_pred == 1 & y_true == 1)
+FP <- sum(y_pred == 1 & y_true == 0)
+FN <- sum(y_pred == 0 & y_true == 1)
+TN <- sum(y_pred == 0 & y_true == 0)
+
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+TPR <- TP / (TP + FN)
+FPR <- FP / (FP + TN)
+TNR <- TN / (TN + FP)
+FNR <- FN / (FN + TP)
+
+rates <- c(
+  Accuracy = accuracy,
+  TPR = TPR,   # sensitivity
+  FPR = FPR,
+  TNR = TNR,   # specificity
+  FNR = FNR
+)
+
+rates
+
+# Accuracy      TPR      FPR      TNR      FNR 
+# 0.8575   0.8950   0.1800   0.8200   0.1050 
+
+########################
+########################
+########################
+########################
+
+
+# All Data
 
 theta_mean <- colMeans(theta)
 y_pred <- ifelse(theta_mean > 0.5, 1, 0)
 y_true <- data_clean$wildfire
 accuracy <- mean(y_pred == y_true)
-accuracy # 0.874
+accuracy # 0.874 # 0.8735 with night time # 0.8755 with everything
 
 
 
@@ -89,13 +135,23 @@ rates <- c(
 rates
 
 
-plot(density(theta), main = "Posterior Distribution for Spatial Hierarchical Model")
 
+
+# Temp Only
 # Accuracy      TPR      FPR      TNR      FNR 
 # 0.828    0.844    0.188    0.812    0.156
 
+
+
+# Temperature, Wind, Humidity
 # Accuracy      TPR      FPR      TNR      FNR 
 # 0.874    0.891    0.143    0.857    0.109
+
+###########
+# Graphs  #
+###########
+
+plot(density(theta), main = "Posterior Distribution for Spatial Hierarchical Model")
 
 #
 # P(Wildfire | theta)
@@ -107,6 +163,7 @@ library(ggplot2)
 theta_mean <- apply(theta, 2, mean) # mean probability per observation
 posterior_df <- data_clean %>%
   mutate(p_wildfire = theta_mean)
+
 
 # Plot scatter + smooth
 ggplot(posterior_df, aes(x = temp_C, y = p_wildfire)) +

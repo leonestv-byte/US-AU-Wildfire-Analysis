@@ -370,6 +370,279 @@ for(i in 1:N){
   }
 }
 
+################################
+##### Precipitation.      ######
+################################
+
+us_sample_fires$precipitation <- NA
+
+for(i in 1:N){
+  if (!is.na(us_sample_fires$precipitation[i])) {
+    next
+  }
+  
+  lat <- us_sample_fires$latitude[i]
+  lon <- us_sample_fires$longitude[i]
+  
+  date_str <- format(
+    as.POSIXct(us_sample_fires$datetime[i], "%Y-%m-%d %H:%M:%S"),
+    "%Y-%m-%d"
+  )
+  
+  url <- sprintf(
+    paste0(
+      "https://archive-api.open-meteo.com/v1/archive?",
+      "latitude=%s&longitude=%s",
+      "&start_date=%s&end_date=%s",
+      "&hourly=precipitation",
+      "&timezone=UTC"
+    ),
+    lat, lon, date_str, date_str
+  )
+  
+  resp <- GET(url)
+  
+  if(status_code(resp) == 200){
+    data <- fromJSON(content(resp, "text", encoding = "UTF-8"))
+    
+    if(length(data$hourly$time) > 0){
+      weather_df <- data.frame(
+        datetime   = ymd_hm(data$hourly$time, tz = "UTC"),
+        precip_mm = data$hourly$precipitation
+      )
+      
+      # Match precipitation by nearest hour
+      idx <- which.min(
+        abs(difftime(weather_df$datetime,
+                     us_sample_fires$datetime[i],
+                     units = "hours"))
+      )
+      
+      us_sample_fires$precipitation[i] <- weather_df$precip_mm[idx]
+      
+      print(sprintf(
+        "Processed request for point %d: %.2f mm",
+        i,
+        us_sample_fires$precipitation[i]
+      ))
+    }
+  } else {
+    print(sprintf("Failed request for point %d", i))
+  }
+}
+
+
+us_sample_no_fires$precipitation <- NA
+
+for(i in 1:N){
+  if (!is.na(us_sample_no_fires$precipitation[i])) {
+    next
+  }
+  
+  lat <- us_sample_no_fires$latitude[i]
+  lon <- us_sample_no_fires$longitude[i]
+  
+  date_str <- format(
+    as.POSIXct(us_sample_no_fires$datetime[i], "%Y-%m-%d %H:%M:%S"),
+    "%Y-%m-%d"
+  )
+  
+  url <- sprintf(
+    paste0(
+      "https://archive-api.open-meteo.com/v1/archive?",
+      "latitude=%s&longitude=%s",
+      "&start_date=%s&end_date=%s",
+      "&hourly=precipitation",
+      "&timezone=UTC"
+    ),
+    lat, lon, date_str, date_str
+  )
+  
+  resp <- GET(url)
+  
+  if(status_code(resp) == 200){
+    data <- fromJSON(content(resp, "text", encoding = "UTF-8"))
+    
+    if(length(data$hourly$time) > 0){
+      weather_df <- data.frame(
+        datetime   = ymd_hm(data$hourly$time, tz = "UTC"),
+        precip_mm = data$hourly$precipitation
+      )
+      
+      # Match precipitation by nearest hour
+      idx <- which.min(
+        abs(difftime(weather_df$datetime,
+                     us_sample_no_fires$datetime[i],
+                     units = "hours"))
+      )
+      
+      us_sample_no_fires$precipitation[i] <- weather_df$precip_mm[idx]
+      
+      print(sprintf(
+        "Processed request for point %d: %.2f mm",
+        i,
+        us_sample_no_fires$precipitation[i]
+      ))
+    }
+  } else {
+    print(sprintf("Failed request for point %d", i))
+  }
+}
+
+
+################################
+##### Soil/Earth Data     ######
+################################
+ee_Authenticate()
+ee_check()
+
+rgee::ee_clean_user_credentials()
+ee_Authenticate()
+library(rgee)
+Sys.setenv(SSL_CERT_FILE = "/etc/ssl/cert.pem")
+ee_Initialize(project = 'wildfiredata979')
+
+# modis_ndvi <- ee$ImageCollection("MODIS/061/MOD13A1")$select("NDVI")
+
+# get_ndvi_for_point <- function(lat, lon, date) {
+ # point <- ee$Geometry$Point(c(lon, lat))
+  
+#  start <- as.character(as.Date(date) - 1)
+#  end <- as.character(as.Date(date) + 1)
+  
+ # img <- modis_ndvi$filterDate(start, end)$first()
+#  if (is.null(img)) return(NA)
+  
+ # ndvi_value <- tryCatch({
+ #   img$reduceRegion(
+ #     reducer = ee$Reducer$mean(),
+ #     geometry = point,
+  #    scale = 500
+ #   )$get("NDVI")$getInfo()
+#  }, error = function(e) NA)
+#  
+#  return(ndvi_value)
+# }
+
+# ndvi <- us_sample_fires[1:10] %>%
+#  rowwise() %>%
+#  mutate(NDVI = get_ndvi_for_point(latitude, longitude, acq_date)) %>%
+#  ungroup()
+
+# row format:
+
+# One working version:
+
+# ndvi_values <- numeric(nrow(us_sample_fires))
+
+# V2:
+
+###########################
+## NDVI Retrieval Method ##
+###########################
+
+modis_ndvi <- ee$ImageCollection("MODIS/061/MOD13A1")$
+  select("NDVI")
+
+get_ndvi_for_point <- function(lat, lon, start_date, end_date) {
+  
+  point <- ee$Geometry$Point(c(lon, lat))
+  
+  img <- modis_ndvi$
+    filterDate(as.character(start_date), as.character(end_date))$
+    median()
+  
+  ndvi_value <- tryCatch({
+    img$reduceRegion(
+      reducer  = ee$Reducer$mean(),
+      geometry = point,
+      scale    = 500,
+      bestEffort = TRUE
+    )$get("NDVI")$getInfo()
+  }, error = function(e) NA)
+  
+  if (is.null(ndvi_value) || length(ndvi_value) == 0) {
+    return(NA_real_)
+  }
+  
+  return(ndvi_value)
+}
+
+
+us_sample_fires$ndvi <- NA_real_
+
+n <- nrow(us_sample_fires)
+
+
+for (i in seq_len(n)) {
+  if (!is.na(us_sample_fires$ndvi[i])) {
+    next
+  }
+  
+  fire_date <- as.Date(us_sample_fires$acq_date[i])
+  
+  start_date <- fire_date - 17
+  end_date   <- fire_date - 1
+  
+  us_sample_fires$ndvi[i] <- get_ndvi_for_point(
+    lat  = us_sample_fires$latitude[i],
+    lon  = us_sample_fires$longitude[i],
+    start_date = start_date,
+    end_date   = end_date
+  )
+  
+  if (i %% 10 == 0) {
+    message("Processed ", i, " / ", n)
+  }
+}
+# TODO: 0 is bad form, but, there is only one value missing
+us_sample_fires$ndvi[is.na(us_sample_fires$ndvi)] <- 0
+# Rescale NDVI (very important)
+us_sample_fires$ndvi <- us_sample_fires$ndvi / 10000
+
+
+
+
+us_sample_no_fires$ndvi <- NA_real_
+
+n <- nrow(us_sample_no_fires)
+
+
+for (i in seq_len(n)) {
+  if (!is.na(us_sample_no_fires$ndvi[i])) {
+    next
+  }
+  
+  datetime <- as.POSIXct(
+    us_sample_no_fires$datetime[i],
+    format = "%Y-%m-%d %H:%M:%OS",
+    tz = "UTC"
+  )
+  
+  acq_date <- as.Date(datetime)
+  
+  fire_date <- as.Date(acq_date)
+  
+  start_date <- fire_date - 17
+  end_date   <- fire_date - 1
+  
+  us_sample_no_fires$ndvi[i] <- get_ndvi_for_point(
+    lat  = us_sample_no_fires$latitude[i],
+    lon  = us_sample_no_fires$longitude[i],
+    start_date = start_date,
+    end_date   = end_date
+  )
+  
+  if (i %% 10 == 0) {
+    message("Processed ", i, " / ", n)
+  }
+}
+# TODO: 0 is bad form, but, there is only one value missing
+us_sample_no_fires$ndvi[is.na(us_sample_no_fires$ndvi)] <- 0
+# Rescale NDVI (very important)
+us_sample_no_fires$ndvi <- us_sample_no_fires$ndvi / 10000
+
+
 
 
 ####################
