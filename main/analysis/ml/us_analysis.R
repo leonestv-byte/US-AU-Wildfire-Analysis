@@ -19,7 +19,10 @@ us_data <- bind_rows(us_data_fires, us_data_no_fires) %>%
     humidity,
     wind,
     ndvi,
-    precipitation
+    precipitation,
+    soil_moisture,
+    elevation,
+    cloud_cover
   )
 
 # Fix different values in computed_daynight_sza and daynight bug:
@@ -27,7 +30,7 @@ us_data <- us_data %>% mutate(daynight_combined = coalesce(daynight, computed_da
 us_data$nighttime <- ifelse(us_data$daynight_combined == "N", 1, 0)
 
 data_clean <- na.omit(us_data[, c("wildfire",
-                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "ndvi", "precipitation")])
+                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "ndvi", "precipitation", "soil_moisture", "cloud_cover", "elevation")])
 
 # 1. Scaled/centered columns
 lat_center <- mean(data_clean$latitude)
@@ -50,12 +53,12 @@ test_data  <- data_clean[-train_idx, ]
 
 
 fit <- brm(
-  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + nighttime + 
-  s(latitude, longitude, k = 10),
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + nighttime + cloud_cover + soil_moisture + elevation +
+  s(latitude, longitude, k = 15),
   data = data_clean, #train_data,
   family = bernoulli(),
   chains = 4,
-  iter = 2000, #10,000
+  iter = 10000,
   cores = 4
 )
 
@@ -109,7 +112,7 @@ theta_mean <- colMeans(theta)
 y_pred <- ifelse(theta_mean > 0.5, 1, 0)
 y_true <- data_clean$wildfire
 accuracy <- mean(y_pred == y_true)
-accuracy # 0.874 # 0.8735 with night time # 0.8755 with everything
+accuracy # 0.874 # 0.8735 with night time # 0.8755 with everything # 0.8765 with 10000 iterations. # 0.8868502 with soil moisture, cloud cover, elevation
 
 
 
