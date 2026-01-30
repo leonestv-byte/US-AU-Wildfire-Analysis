@@ -5,7 +5,6 @@ library(brms)
 au_data_fires <- read.csv("MSISS/wildfires/main/data/1000_samples/au_1000_sample_fires.csv")
 au_data_no_fires <- read.csv("MSISS/wildfires/main/data/1000_samples/au_1000_sample_no_fires.csv")
 
-
 library(dplyr)
 
 au_data <- bind_rows(au_data_fires, au_data_no_fires) %>%
@@ -15,15 +14,23 @@ au_data <- bind_rows(au_data_fires, au_data_no_fires) %>%
     latitude,
     longitude,
     computed_daynight_sza,
+    daynight,
     humidity,
-    wind
+    wind,
+    elevation,
+    soil_moisture,
+    ndvi,
+    cloud_cover,
+    precipitation
   )
 
-# TODO: merge with daynight
-#au_data$nighttime <- ifelse(au_data$computed_daynight_sza == "N", 1, 0)
+# Fix different values in computed_daynight_sza and daynight bug:
+au_data <- au_data %>% mutate(daynight_combined = coalesce(daynight, computed_daynight_sza))
+au_data$nighttime <- ifelse(au_data$daynight_combined == "N", 1, 0)
+
 
 data_clean <- na.omit(au_data[, c("wildfire",
-                                  "latitude", "longitude", "temp_C", "wind", "humidity")])
+                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "elevation", "soil_moisture", "ndvi", "cloud_cover", "precipitation")])
 
 # 1. Scaled/centered columns
 lat_center <- mean(data_clean$latitude)
@@ -46,7 +53,7 @@ test_data  <- data_clean[-train_idx, ]
 
 
 fit <- brm(
-  wildfire ~ temp_C + humidity + wind + 
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + cloud_cover + soil_moisture + elevation + nighttime +
   s(latitude, longitude, k = 10),
   data = data_clean,
   family = bernoulli(),
@@ -63,7 +70,7 @@ theta_mean <- colMeans(theta)
 y_pred <- ifelse(theta_mean > 0.5, 1, 0)
 y_true <- data_clean$wildfire
 accuracy <- mean(y_pred == y_true)
-accuracy # 0.869
+accuracy # 0.869 # 0.8685 with nighttime
 
 theta_mean <- colMeans(theta)
 y_pred <- ifelse(theta_mean > 0.5, 1, 0) #0.35 - best TPR, TNR split
