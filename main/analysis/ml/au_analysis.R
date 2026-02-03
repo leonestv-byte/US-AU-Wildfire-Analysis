@@ -7,6 +7,16 @@ au_data_no_fires <- read.csv("MSISS/wildfires/main/data/1000_samples/au_1000_sam
 
 library(dplyr)
 
+au_data_fires$population - ifelse(is.na(au_data_fires$population), 0, au_data_fires$population)
+au_data_no_fires$population - ifelse(is.na(au_data_fires$population), 0, au_data_fires$population)
+
+au_data_fires$state <- factor(au_data_fires$state)
+au_data_no_fires$state <- factor(au_data_no_fires$state)
+
+au_data_fires$city <- factor(au_data_fires$city)
+au_data_no_fires$state <- factor(au_data_no_fires$city)
+
+
 au_data <- bind_rows(au_data_fires, au_data_no_fires) %>%
   select(
     wildfire,
@@ -21,7 +31,10 @@ au_data <- bind_rows(au_data_fires, au_data_no_fires) %>%
     soil_moisture,
     ndvi,
     cloud_cover,
-    precipitation
+    precipitation,
+    population,
+    state,
+    city
   )
 
 # Fix different values in computed_daynight_sza and daynight bug:
@@ -30,7 +43,7 @@ au_data$nighttime <- ifelse(au_data$daynight_combined == "N", 1, 0)
 
 
 data_clean <- na.omit(au_data[, c("wildfire",
-                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "elevation", "soil_moisture", "ndvi", "cloud_cover", "precipitation")])
+                                  "latitude", "longitude", "temp_C", "wind", "humidity", "nighttime", "elevation", "soil_moisture", "ndvi", "cloud_cover", "precipitation", "population", "city", "state")])
 
 # 1. Scaled/centered columns
 lat_center <- mean(data_clean$latitude)
@@ -53,7 +66,7 @@ test_data  <- data_clean[-train_idx, ]
 
 
 fit <- brm(
-  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + cloud_cover + soil_moisture + elevation + nighttime +
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + cloud_cover + soil_moisture + elevation + nighttime  + 
   s(latitude, longitude, k = 10),
   data = data_clean,
   family = bernoulli(),
@@ -77,6 +90,7 @@ y_pred <- ifelse(theta_mean > 0.5, 1, 0) #0.35 - best TPR, TNR split
 y_true <- data_clean$wildfire
 accuracy <- mean(y_pred == y_true)
 accuracy #  0.866
+
 
 
 TP <- sum(y_pred == 1 & y_true == 1)
@@ -130,5 +144,159 @@ ggplot(posterior_df, aes(x = temp_C, y = p_wildfire)) +
   labs(x = "Temperature (°C)",
        y = "Posterior P(Wildfire | temp_C)",
        title = "Posterior Probability of Wildfire vs Temperature")
+
+
+################################################
+### Other Models - State, City Hierarchy 1) ####
+################################################
+
+n <- nrow(data_clean)
+train_idx <- sample(seq_len(n), size = 0.6 * n)
+train_data <- data_clean[train_idx, ]
+test_data  <- data_clean[-train_idx, ]
+
+fit <- brm(
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + cloud_cover + soil_moisture + elevation + nighttime  + (1 | state) + (1 | state:city),
+  data = train_data,
+  family = bernoulli(),
+  chains = 4,
+  iter = 2000, #10,000
+  cores = 4
+)
+
+
+########################
+# Test Data Result     #
+########################
+p_test <- posterior_epred(fit, newdata = test_data, allow_new_levels = TRUE)
+p_test_mean <- colMeans(p_test)
+y_pred <- ifelse(p_test_mean > 0.5, 1, 0)
+y_true <- test_data$wildfire
+
+accuracy <- mean(y_pred == y_true)
+accuracy # 0.8575
+
+TP <- sum(y_pred == 1 & y_true == 1)
+FP <- sum(y_pred == 1 & y_true == 0)
+FN <- sum(y_pred == 0 & y_true == 1)
+TN <- sum(y_pred == 0 & y_true == 0)
+
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+TPR <- TP / (TP + FN)
+FPR <- FP / (FP + TN)
+TNR <- TN / (TN + FP)
+FNR <- FN / (FN + TP)
+
+rates <- c(
+  Accuracy = accuracy,
+  TPR = TPR,   # sensitivity
+  FPR = FPR,
+  TNR = TNR,   # specificity
+  FNR = FNR
+)
+
+rates
+
+
+################################################
+### Other Models - State, City Hierarchy 2) ####
+################################################
+
+n <- nrow(data_clean)
+train_idx <- sample(seq_len(n), size = 0.6 * n)
+train_data <- data_clean[train_idx, ]
+test_data  <- data_clean[-train_idx, ]
+
+
+fit <- brm(
+  wildfire ~ temp_C  + wind + humidity + ndvi + precipitation + cloud_cover + soil_moisture + elevation + nighttime  + (1 | state) + (1 | city),
+  data = train_data,
+  family = bernoulli(),
+  chains = 4,
+  iter = 2000, #10,000
+  cores = 4
+)
+
+p_test <- posterior_epred(fit, newdata = test_data, allow_new_levels = TRUE)
+p_test_mean <- colMeans(p_test)
+y_pred <- ifelse(p_test_mean > 0.5, 1, 0)
+y_true <- test_data$wildfire
+
+accuracy <- mean(y_pred == y_true)
+accuracy # 0.8575
+
+TP <- sum(y_pred == 1 & y_true == 1)
+FP <- sum(y_pred == 1 & y_true == 0)
+FN <- sum(y_pred == 0 & y_true == 1)
+TN <- sum(y_pred == 0 & y_true == 0)
+
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+TPR <- TP / (TP + FN)
+FPR <- FP / (FP + TN)
+TNR <- TN / (TN + FP)
+FNR <- FN / (FN + TP)
+
+rates <- c(
+  Accuracy = accuracy,
+  TPR = TPR,   # sensitivity
+  FPR = FPR,
+  TNR = TNR,   # specificity
+  FNR = FNR
+)
+
+rates
+
+################################################
+### Other Models - 3)                       ####
+################################################
+
+
+# We can see intercepts for each predictor per individual city or state, and how much they impact it. 
+
+n <- nrow(data_clean)
+train_idx <- sample(seq_len(n), size = 0.6 * n)
+train_data <- data_clean[train_idx, ]
+test_data  <- data_clean[-train_idx, ]
+
+
+fit <- brm(
+  wildfire ~ temp_C + ndvi + wind + humidity  + precipitation + cloud_cover + elevation + nighttime  + (1  | state) + (1 + soil_moisture  | city),
+  data = train_data,
+  family = bernoulli(),
+  chains = 4,
+  iter = 2000,
+  cores = 4
+)
+
+p_test <- posterior_epred(fit, newdata = test_data, allow_new_levels = TRUE)
+p_test_mean <- colMeans(p_test)
+y_pred <- ifelse(p_test_mean > 0.5, 1, 0)
+y_true <- test_data$wildfire
+
+accuracy <- mean(y_pred == y_true)
+accuracy # 0.8575
+
+TP <- sum(y_pred == 1 & y_true == 1)
+FP <- sum(y_pred == 1 & y_true == 0)
+FN <- sum(y_pred == 0 & y_true == 1)
+TN <- sum(y_pred == 0 & y_true == 0)
+
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+TPR <- TP / (TP + FN)
+FPR <- FP / (FP + TN)
+TNR <- TN / (TN + FP)
+FNR <- FN / (FN + TP)
+
+rates <- c(
+  Accuracy = accuracy,
+  TPR = TPR,   # sensitivity
+  FPR = FPR,
+  TNR = TNR,   # specificity
+  FNR = FNR
+)
+
+rates
+
+
 
 
