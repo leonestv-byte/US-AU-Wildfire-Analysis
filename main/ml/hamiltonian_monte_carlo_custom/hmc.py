@@ -91,7 +91,7 @@ def make_spatial_basis(lat, lon, centers, bandwidth=1.0):
     d2 = (lat[:, None] - centers[:, 0])**2 + (lon[:, None] - centers[:, 1])**2
     return np.exp(-d2 / (2 * bandwidth**2))
 
-K = 20
+K = 55
 idx = np.random.choice(len(data_clean), K, replace=False)
 centers = data_clean[["latitude", "longitude"]].iloc[idx].values
 
@@ -226,6 +226,7 @@ theta_mean = theta.mean(axis=0)
 y_pred = (theta_mean > 0.55).astype(int)
 accuracy = (y_pred == y).mean()
 print(accuracy)
+# 0.8567787971457697 base accuracy
 
 
 
