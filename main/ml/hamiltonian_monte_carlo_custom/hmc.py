@@ -307,7 +307,7 @@ def logpost_and_grad(beta0, beta, gamma, X, Z, y, severity):
     # error
     w = severity / np.max(severity)  # shape: (n_obs,)
     # ensure all entries are positive
-    w = np.maximum(w, 0.5)  
+    w = np.maximum(w, 0.4)  
 
     # weighted log-likelihood
     loglik = np.sum(w * (y * np.log(p + 1e-9) + (1 - y) * np.log(1 - p + 1e-9)))
